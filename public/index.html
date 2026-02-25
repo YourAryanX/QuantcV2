@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantC V2 | Neural Network</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"> 
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    
+    <div id="toast-container"></div>
+
+    <div class="background-canvas">
+        <div class="bubble b1" id="orb-1"></div>
+        <div class="bubble b2" id="orb-2"></div>
+        <div class="bubble b3" id="orb-3"></div>
+    </div>
+
+    <div id="particle-container"></div>
+
+    <aside class="floating-nav">
+        <div class="nav-brand magnetic-btn">Q</div>
+        <button id="nav-single" class="nav-btn magnetic-btn active" title="Single Upload">
+            <i class="fa-solid fa-plus-circle"></i>
+        </button>
+        <button id="nav-session" class="nav-btn magnetic-btn" title="Neural Session">
+            <i class="fa-solid fa-layer-group"></i>
+        </button>
+        <button id="nav-retrieve" class="nav-btn magnetic-btn" title="Retrieve Data">
+            <i class="fa-solid fa-fingerprint"></i>
+        </button>
+    </aside>
+
+    <main class="viewport">
+        <div class="heading-section">
+            <h1 class="main-heading">Quant<span>c</span></h1>
+            <p class="sub-heading">Next-gen anonymous world.</p>
+        </div>
+
+        <div id="view-single" class="glass-hub">
+            <div class="loading-overlay hidden" id="loader-single">
+                <div class="spinner"></div>
+                <span id="progress-text-single">Injecting Packet...</span>
+            </div>
+
+            <form id="form-single">
+                <input type="file" id="single-file-input" hidden>
+                <label for="single-file-input" class="drop-trigger">
+                    <div class="pulse-icon"><i class="fa-solid fa-atom"></i></div>
+                    <span id="single-file-name">Upload Packet</span>
+                </label>
+
+                <div class="input-glow-group">
+                    <i class="fa-solid fa-shield-virus"></i>
+                    <input type="password" id="single-password" placeholder="Set Key Phrase" required>
+                </div>
+
+                <button type="submit" class="btn-glow-primary">GET CODE</button>
+            </form>
+        </div>
+
+        <div id="view-session" class="glass-hub hidden session-hud">
+            <div class="loading-overlay hidden" id="loader-session">
+                <div class="spinner"></div>
+                <span id="progress-text-session">Processing Session...</span>
+            </div>
+
+            <div class="hud-header">
+                <div class="hud-title"><i class="fa-solid fa-layer-group"></i> QuantC Session</div>
+                <div class="hud-counter"><span id="file-count">0</span>/10 Files</div>
+            </div>
+
+            <div id="session-toolbar" class="session-toolbar hidden">
+                <div class="toolbar-left">
+                    <label class="custom-checkbox" title="Select All">
+                        <input type="checkbox" id="select-all-files">
+                        <span class="checkmark"></span>
+                    </label>
+                    <span id="selection-label">Select All</span>
+                </div>
+                <div class="toolbar-right">
+                    <button id="batch-delete-btn" class="tool-btn danger hidden" title="Delete Selected"><i class="fa-solid fa-trash"></i></button>
+                    <button id="add-more-btn" class="tool-btn action" title="Add More Files"><i class="fa-solid fa-plus"></i></button>
+                </div>
+            </div>
+
+            <div id="session-file-list" class="data-stream">
+                <div id="empty-drop-zone" class="drop-zone-content">
+                    <div class="icon-box">
+                        <div class="neural-core-container">
+                            <svg class="neural-core-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                <circle class="neural-pulse" cx="50" cy="50" r="35" fill="currentColor" />
+                                <path class="neural-track" d="M 5 5 L 35 35 M 95 5 L 65 35 M 5 95 L 35 65 M 95 95 L 65 65 M 50 0 L 50 30 M 50 100 L 50 70 M 0 50 L 30 50 M 100 50 L 70 50" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="4 16" />
+                                <circle class="neural-ring inner" cx="50" cy="50" r="16" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="15 10"/>
+                                <circle class="neural-ring outer" cx="50" cy="50" r="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="25 15 5 15"/>
+                                <polygon class="neural-center" points="50,38 60,50 50,62 40,50" fill="currentColor"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <p>Drop files here or click to browse</p>
+                </div>
+            </div>
+            <input type="file" id="session-file-input" multiple hidden>
+
+            <div class="hud-footer">
+                <div class="input-glow-group">
+                    <i class="fa-solid fa-key"></i>
+                    <input type="password" id="session-password" placeholder="Set Session Key">
+                </div>
+                <button id="session-submit-btn" class="btn-glow-primary full-width">INITIATE TRANSFER</button>
+            </div>
+        </div>
+
+        <div id="view-retrieve" class="glass-hub hidden">
+            <div class="loading-overlay hidden" id="loader-retrieve">
+                <div class="spinner"></div>
+                <span>Locating Nodes...</span>
+            </div>
+
+            <form id="form-retrieve">
+                <div class="input-glow-group">
+                    <i class="fa-solid fa-hashtag"></i>
+                    <input type="text" id="retrieve-code" placeholder="6-Digit Code" maxlength="6" required autocomplete="off">
+                </div>
+                <div class="input-glow-group">
+                    <i class="fa-solid fa-key"></i>
+                    <input type="password" id="retrieve-password" placeholder="Key Phrase" required>
+                </div>
+                <button type="submit" class="btn-glow-primary">DECRYPT FILES</button>
+            </form>
+        </div>
+
+        <div id="view-results" class="glass-hub hidden session-hud">
+            <div class="loading-overlay hidden" id="loader-edit">
+                <div class="spinner"></div>
+                <span id="progress-text-edit">Updating Session...</span>
+            </div>
+
+            <div class="hud-header">
+                <div class="hud-title"><i class="fa-solid fa-folder-open"></i> Decrypted Session</div>
+                <div class="hud-counter"><span id="result-count">0</span> Files</div>
+            </div>
+
+            <div id="normal-toolbar" class="session-toolbar">
+                <div class="toolbar-left">
+                    <span style="color: var(--text-muted); font-weight: 600;">Code:</span>
+                    <span id="session-code-display" class="highlight-code" style="margin-left: 8px;"></span>
+                </div>
+                <div class="toolbar-right">
+                    <button id="edit-session-btn" class="tool-btn" title="Edit Session"><i class="fa-solid fa-pen"></i></button>
+                    <button id="download-all-btn" class="tool-btn action" title="Download All"><i class="fa-solid fa-download"></i></button>
+                </div>
+            </div>
+
+            <div id="edit-toolbar" class="session-toolbar hidden">
+                <div class="toolbar-left">
+                    <label class="custom-checkbox" title="Select All">
+                        <input type="checkbox" id="edit-select-all">
+                        <span class="checkmark"></span>
+                    </label>
+                    <span style="margin-left: 8px;">Select All</span>
+                </div>
+                <div class="toolbar-right">
+                    <button id="edit-batch-delete-btn" class="tool-btn danger hidden" title="Delete Selected"><i class="fa-solid fa-trash"></i></button>
+                    <button id="edit-add-more-btn" class="tool-btn action" title="Add More Files"><i class="fa-solid fa-plus"></i></button>
+                </div>
+            </div>
+
+            <div id="results-file-list" class="data-stream results-stream"></div>
+            
+            <div id="edit-drop-zone" class="drop-zone-content hidden">
+                <div class="icon-box">
+                    <div class="neural-core-container" style="transform: scale(0.7); margin-bottom: 0;">
+                        <svg class="neural-core-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <circle class="neural-pulse" cx="50" cy="50" r="35" fill="currentColor" />
+                            <path class="neural-track" d="M 5 5 L 35 35 M 95 5 L 65 35 M 5 95 L 35 65 M 95 95 L 65 65 M 50 0 L 50 30 M 50 100 L 50 70 M 0 50 L 30 50 M 100 50 L 70 50" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="4 16" />
+                            <circle class="neural-ring inner" cx="50" cy="50" r="16" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="15 10"/>
+                            <circle class="neural-ring outer" cx="50" cy="50" r="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="25 15 5 15"/>
+                            <polygon class="neural-center" points="50,38 60,50 50,62 40,50" fill="currentColor"/>
+                        </svg>
+                    </div>
+                </div>
+                <p>Drop files to add to session</p>
+            </div>
+            <input type="file" id="edit-file-input" multiple hidden>
+
+            <div id="normal-footer" class="hud-footer results-footer">
+                <button id="back-to-home" class="btn-glow-primary full-width">CLOSE SESSION</button>
+            </div>
+
+            <style>
+                .edit-save-btn { width: 100%; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px; border-radius: 18px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #ffffff; }
+                .edit-save-btn:hover { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); background: rgba(255, 255, 255, 0.08); }
+            </style>
+            <div id="edit-footer" class="hud-footer results-footer hidden" style="display: flex; flex-direction: column; gap: 15px;">
+                <button id="save-edits-btn" class="edit-save-btn">
+                    <i class="fa-solid fa-floppy-disk"></i> SAVE CHANGES
+                </button>
+                <button id="cancel-edit-btn" class="btn-glow-primary full-width">
+                    CLOSE SESSION
+                </button>
+            </div>
+        </div>
+
+        <div id="view-success" class="glass-hub hidden">
+            <div class="success-icon"><i class="fa-solid fa-check"></i></div>
+            <h3 style="text-align: center; margin-bottom: 15px;">Session Secured</h3>
+            <div class="code-display-box">
+                <span id="generated-code">000000</span>
+                <button id="copy-btn" title="Copy Code" ><i class="fa-solid fa-copy"></i></button>
+            </div>
+            <div class="caution-box">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>Code expires in 48 hours.</span>
+            </div>
+            <button id="reset-upload-btn" class="btn-glow-primary" style="margin-top: 15px; width: 100%;">NEW UPLOAD</button>
+        </div>
+
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
