@@ -87,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function shredAndUpload(file, password, onProgress) {
         try {
             // --- DYNAMIC CHUNK OPTIMIZER ---
-            // Intelligently balances API limits with network stability
             let dynamicChunkSize = 5 * 1024 * 1024; // Default 5MB for small files
             if (file.size > 50 * 1024 * 1024) dynamicChunkSize = 25 * 1024 * 1024; // 25MB for files > 50MB
             if (file.size > 500 * 1024 * 1024) dynamicChunkSize = 50 * 1024 * 1024; // 50MB for massive files
@@ -186,11 +185,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if(!file || !password) return showToast("File & Key Phrase required", "error");
 
         const loader = document.getElementById('loader-single');
+        const progressText = document.getElementById('progress-text-single');
         loader.classList.remove('hidden');
 
         try {
             const fileData = await shredAndUpload(file, password, (pct) => {
-                document.getElementById('progress-text-single').innerText = `Encrypting Packet (${pct}%)`;
+                if (progressText) progressText.innerText = `Encrypting Packet (${pct}%)`;
             });
             
             const saveRes = await fetch(`${API_URL}/save-session`, {
@@ -205,8 +205,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 singleForm.reset();
                 singleFileName.innerText = 'Upload Packet';
             } else throw new Error(data.message);
-        } catch(e) { showToast(typeof e === 'string' ? e : "Upload Failed", "error"); } 
-        finally { loader.classList.add('hidden'); document.getElementById('progress-text-single').innerText = "Injecting Packet..."; }
+        } catch(e) { 
+            showToast(typeof e === 'string' ? e : "Upload Failed", "error"); 
+        } finally { 
+            loader.classList.add('hidden'); 
+            if (progressText) progressText.innerText = "Injecting Packet..."; 
+        }
     });
 
     // ==========================================
@@ -282,7 +286,6 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedIndices.clear(); renderSessionList();
     });
 
-    // Enter Key Support for Session Upload
     document.getElementById('session-password').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); sessionSubmitBtn.click(); }
     });
@@ -342,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(data.success) {
                 document.getElementById('retrieve-code').value = ''; document.getElementById('retrieve-password').value = '';
                 
-                // Direct Download for Single Files
                 if (data.files.length === 1 && data.files[0].format !== 'session') {
                     triggerDownload(data.files[0], currentSessionPassword);
                     switchView('single'); return;
@@ -435,9 +437,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // THE REASSEMBLER (Zero-Memory Decryption & Download)
+    // THE REASSEMBLER (Silent Blob Download Fix)
     window.triggerDownload = async (fileMeta, password) => {
-        // LEGACY V2 SUPPORT (Ensures old un-chunked files still download perfectly)
+        // LEGACY V2 SUPPORT
         if (fileMeta.url && !fileMeta.chunks) {
             const downloadUrl = fileMeta.url.replace('/upload/', '/upload/fl_attachment/');
             const link = document.createElement('a');
@@ -464,22 +466,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 keyMaterial, {name: "AES-GCM", length: 256}, false, ["decrypt"]
             );
 
-            // 2. Prepare File System Stream (Bypasses Browser RAM Limits)
-            const isStreamsSupported = 'showSaveFilePicker' in window;
-            let writableStream;
-            let fallbackBlobs = [];
+            // 2. Array to hold the decrypted chunks in memory
+            let decryptedChunks = [];
 
-            if (isStreamsSupported) {
-                try {
-                    const handle = await window.showSaveFilePicker({ suggestedName: fileMeta.originalName });
-                    writableStream = await handle.createWritable();
-                } catch(e) {
-                    if(loader) loader.classList.add('hidden');
-                    return; // User cancelled the save dialog
-                }
-            }
-
-            // 3. Stream, Decrypt, and Write Chunks
+            // 3. Fetch and Decrypt Chunks
             for (let i = 0; i < fileMeta.chunks.length; i++) {
                 progressText.innerText = `Decrypting Chunk ${i+1}/${fileMeta.chunks.length}...`;
                 
@@ -487,28 +477,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const encryptedBuffer = await res.arrayBuffer();
                 const decryptedBuffer = await crypto.subtle.decrypt({name: "AES-GCM", iv: iv}, key, encryptedBuffer);
 
-                if (isStreamsSupported) {
-                    await writableStream.write(decryptedBuffer); // Flush to hard drive immediately
-                } else {
-                    fallbackBlobs.push(decryptedBuffer); // Fallback for mobile devices
-                }
+                decryptedChunks.push(decryptedBuffer);
             }
 
-            // 4. Finish
-            if (isStreamsSupported) {
-                await writableStream.close();
-            } else {
-                const finalBlob = new Blob(fallbackBlobs);
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(finalBlob);
-                link.download = fileMeta.originalName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                setTimeout(() => URL.revokeObjectURL(link.href), 10000);
-            }
+            progressText.innerText = "Assembling File...";
 
-            showToast("File Decrypted & Saved!", "success");
+            // 4. Create silent download link using Blob Object URL
+            const finalBlob = new Blob(decryptedChunks);
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(finalBlob);
+            link.download = fileMeta.originalName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up memory after a few seconds
+            setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+
+            showToast("File Decrypted & Downloaded!", "success");
             if(loader) loader.classList.add('hidden');
 
         } catch (e) {
@@ -528,7 +514,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- NORMAL MODE ACTIONS ---
     document.getElementById('download-all-btn').addEventListener('click', async () => {
         showToast("Initiating bulk download...", "success");
-        // Await sequentially to prevent memory/network crashing
         for(let i=0; i<retrievedFiles.length; i++) {
             await triggerDownload(retrievedFiles[i], currentSessionPassword);
         }
