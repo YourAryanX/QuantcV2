@@ -19,16 +19,16 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB Connected"))
     .catch(err => console.error("❌ DB Connection Error:", err));
 
-// --- DATABASE SCHEMA (Updated for Chunking) ---
+// --- DATABASE SCHEMA (Updated for Dynamic Chunking) ---
 const sessionSchema = new mongoose.Schema({
     code: { type: String, unique: true },
     passwordHash: { type: String, required: true },
     type: { type: String, enum: ['single', 'session'], default: 'single' },
     files: [{
         originalName: String,
-        url: String,       // Kept for legacy compatibility
+        url: String,       // Kept for legacy (V1/V2 early) compatibility
         publicId: String,  // Kept for legacy compatibility
-        chunks: [String],  // Array of Cloudinary URLs for the encrypted 5MB slices
+        chunks: [String],  // Array of Cloudinary URLs for encrypted slices
         format: String,
         size: Number,
         salt: [Number],    // Needed for Client-Side Decryption
@@ -67,7 +67,7 @@ app.get("/api/sign-upload", (req, res) => {
     const timestamp = Math.round((new Date()).getTime() / 1000);
     const signature = cloudinary.utils.api_sign_request({
         timestamp: timestamp,
-        folder: "quantc_v2_neural", // Fallback for single uploads
+        folder: "quantc_v2_chunks", // Updated target folder
     }, process.env.CLOUDINARY_API_SECRET);
 
     res.json({ 

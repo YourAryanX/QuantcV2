@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     const API_URL = 'https://quantcv2.onrender.com/api'; // Live Render API
     const MAX_FILES = 10;
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB Slices for Client-Side Shredding
     
     // Upload State
     let sessionFiles = []; 
@@ -35,12 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
         retrieve: document.getElementById('nav-retrieve')
     };
 
-    // Single Upload Elements
     const singleFileInput = document.getElementById('single-file-input');
     const singleFileName = document.getElementById('single-file-name');
     const singleForm = document.getElementById('form-single');
 
-    // Session Elements
     const sessionListEl = document.getElementById('session-file-list');
     const sessionInput = document.getElementById('session-file-input');
     const toolbar = document.getElementById('session-toolbar');
@@ -85,10 +82,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 4. THE SHREDDER (CHUNKED UPLOAD & ENCRYPTION)
+    // 4. THE SHREDDER (DYNAMIC CHUNKING & ENCRYPTION)
     // ==========================================
     async function shredAndUpload(file, password, onProgress) {
         try {
+            // --- DYNAMIC CHUNK OPTIMIZER ---
+            // Intelligently balances API limits with network stability
+            let dynamicChunkSize = 5 * 1024 * 1024; // Default 5MB for small files
+            if (file.size > 50 * 1024 * 1024) dynamicChunkSize = 25 * 1024 * 1024; // 25MB for files > 50MB
+            if (file.size > 500 * 1024 * 1024) dynamicChunkSize = 50 * 1024 * 1024; // 50MB for massive files
+
             // 1. Zero-Knowledge Setup: Generate AES-GCM Key
             const encoder = new TextEncoder();
             const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
@@ -99,18 +102,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 keyMaterial, {name: "AES-GCM", length: 256}, false, ["encrypt"]
             );
 
-            const totalChunks = Math.ceil(file.size / CHUNK_SIZE) || 1;
+            const totalChunks = Math.ceil(file.size / dynamicChunkSize) || 1;
             const chunkUrls = [];
 
-            // 2. Get Cloudinary Signature
+            // 2. Get Secure Cloudinary Signature
             const signRes = await fetch(`${API_URL}/sign-upload`);
             if(!signRes.ok) throw new Error("Could not get secure signature.");
             const signData = await signRes.json();
 
             // 3. Slice, Encrypt, and Upload chunks one by one
             for (let i = 0; i < totalChunks; i++) {
-                const start = i * CHUNK_SIZE;
-                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const start = i * dynamicChunkSize;
+                const end = Math.min(start + dynamicChunkSize, file.size);
                 const slice = file.slice(start, end);
                 const buffer = await slice.arrayBuffer();
 
@@ -124,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append("timestamp", signData.timestamp);
                 formData.append("signature", signData.signature);
                 formData.append("folder", "quantc_v2_chunks");
-                formData.append("resource_type", "raw"); // Must be raw for binary data
+                formData.append("resource_type", "raw"); 
 
                 // Upload chunk with progress tracking
                 await new Promise((resolve, reject) => {
@@ -279,6 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedIndices.clear(); renderSessionList();
     });
 
+    // Enter Key Support for Session Upload
     document.getElementById('session-password').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); sessionSubmitBtn.click(); }
     });
@@ -446,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             showToast(`Starting secure decryption for ${fileMeta.originalName}...`, "success");
             const loader = document.getElementById('loader-edit') || document.getElementById('loader-retrieve');
-            const progressText = document.getElementById('progress-text-edit');
+            const progressText = document.getElementById('progress-text-edit') || document.getElementById('progress-text-retrieve') || { innerText: '' };
             
             if(loader) loader.classList.remove('hidden');
 
@@ -477,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 3. Stream, Decrypt, and Write Chunks
             for (let i = 0; i < fileMeta.chunks.length; i++) {
-                if(progressText) progressText.innerText = `Decrypting Chunk ${i+1}/${fileMeta.chunks.length}...`;
+                progressText.innerText = `Decrypting Chunk ${i+1}/${fileMeta.chunks.length}...`;
                 
                 const res = await fetch(fileMeta.chunks[i]);
                 const encryptedBuffer = await res.arrayBuffer();
@@ -637,6 +641,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateBackground();
 
-    // --- WAKE UP SERVER ON PAGE LOAD ---
+    // --- WAKE UP SERVER ON PAGE LOAD (Fixes Cold Start) ---
     fetch(`${API_URL}/ping`).catch(() => console.log("Waking up server..."));
 });
