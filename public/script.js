@@ -230,6 +230,14 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedIndices.clear(); renderSessionList();
     });
 
+    // --- Trigger Submit on Enter Key ---
+    document.getElementById('session-password').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sessionSubmitBtn.click();
+        }
+    });
+
     sessionSubmitBtn.addEventListener('click', async () => {
         const password = document.getElementById('session-password').value;
         if(sessionFiles.length === 0) return showToast('Basket is empty', 'error');
@@ -513,4 +521,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateBackground();
 
+    // --- WAKE UP SERVER ON PAGE LOAD ---
+    fetch(`${API_URL}/ping`).catch(() => console.log("Waking up server..."));
 });
