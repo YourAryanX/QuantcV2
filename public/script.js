@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     const API_URL = 'https://quantcv2.onrender.com/api'; // Live Render API
     const MAX_FILES = 10;
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB Slices for Client-Side Shredding
     
     // Upload State
     let sessionFiles = []; 
@@ -84,34 +85,81 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 4. CLOUDINARY UPLOAD HELPER
+    // 4. THE SHREDDER (CHUNKED UPLOAD & ENCRYPTION)
     // ==========================================
-    async function uploadToCloudinary(file, onProgress) {
+    async function shredAndUpload(file, password, onProgress) {
         try {
+            // 1. Zero-Knowledge Setup: Generate AES-GCM Key
+            const encoder = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const key = await crypto.subtle.deriveKey(
+                {name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256"}, 
+                keyMaterial, {name: "AES-GCM", length: 256}, false, ["encrypt"]
+            );
+
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE) || 1;
+            const chunkUrls = [];
+
+            // 2. Get Cloudinary Signature
             const signRes = await fetch(`${API_URL}/sign-upload`);
             if(!signRes.ok) throw new Error("Could not get secure signature.");
             const signData = await signRes.json();
 
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("api_key", signData.apiKey);
-            formData.append("timestamp", signData.timestamp);
-            formData.append("signature", signData.signature);
-            formData.append("folder", "quantc_v2_neural");
+            // 3. Slice, Encrypt, and Upload chunks one by one
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const slice = file.slice(start, end);
+                const buffer = await slice.arrayBuffer();
 
-            return new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open("POST", `https://api.cloudinary.com/v1_1/${signData.cloudName}/auto/upload`, true);
-                xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-                };
-                xhr.onload = () => {
-                    if (xhr.status === 200) resolve(JSON.parse(xhr.responseText));
-                    else reject("Cloud Upload Error");
-                };
-                xhr.onerror = () => reject("Network Error during upload");
-                xhr.send(formData);
-            });
+                // Encrypt chunk
+                const encryptedBuffer = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, key, buffer);
+                const encryptedBlob = new Blob([encryptedBuffer], {type: "application/octet-stream"});
+
+                const formData = new FormData();
+                formData.append("file", encryptedBlob, `chunk_${i}.dat`);
+                formData.append("api_key", signData.apiKey);
+                formData.append("timestamp", signData.timestamp);
+                formData.append("signature", signData.signature);
+                formData.append("folder", "quantc_v2_chunks");
+                formData.append("resource_type", "raw"); // Must be raw for binary data
+
+                // Upload chunk with progress tracking
+                await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open("POST", `https://api.cloudinary.com/v1_1/${signData.cloudName}/raw/upload`, true);
+                    
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable && onProgress) {
+                            const chunkPercent = (e.loaded / e.total);
+                            const overallProgress = Math.round(((i + chunkPercent) / totalChunks) * 100);
+                            onProgress(overallProgress);
+                        }
+                    };
+                    
+                    xhr.onload = () => {
+                        if (xhr.status === 200) {
+                            const data = JSON.parse(xhr.responseText);
+                            chunkUrls.push(data.secure_url);
+                            resolve();
+                        } else reject("Chunk Upload Error");
+                    };
+                    xhr.onerror = () => reject("Network Error during upload");
+                    xhr.send(formData);
+                });
+            }
+
+            // Return the complete manifest to save to MongoDB
+            return { 
+                originalName: file.name, 
+                chunks: chunkUrls, 
+                salt: Array.from(salt), 
+                iv: Array.from(iv), 
+                size: file.size, 
+                format: 'encrypted' 
+            };
         } catch (error) { throw error.message || error; }
     }
 
@@ -138,15 +186,16 @@ document.addEventListener('DOMContentLoaded', () => {
         loader.classList.remove('hidden');
 
         try {
-            const cloudRes = await uploadToCloudinary(file);
+            const fileData = await shredAndUpload(file, password, (pct) => {
+                document.getElementById('progress-text-single').innerText = `Encrypting Packet (${pct}%)`;
+            });
+            
             const saveRes = await fetch(`${API_URL}/save-session`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    password, type: 'single',
-                    files: [{ originalName: file.name, url: cloudRes.secure_url, publicId: cloudRes.public_id, format: cloudRes.format, size: cloudRes.bytes }]
-                })
+                body: JSON.stringify({ password, type: 'single', files: [fileData] })
             });
             const data = await saveRes.json();
+            
             if(data.success) {
                 document.getElementById('generated-code').innerText = data.code;
                 switchView('success');
@@ -154,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 singleFileName.innerText = 'Upload Packet';
             } else throw new Error(data.message);
         } catch(e) { showToast(typeof e === 'string' ? e : "Upload Failed", "error"); } 
-        finally { loader.classList.add('hidden'); }
+        finally { loader.classList.add('hidden'); document.getElementById('progress-text-single').innerText = "Injecting Packet..."; }
     });
 
     // ==========================================
@@ -230,12 +279,8 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedIndices.clear(); renderSessionList();
     });
 
-    // --- Trigger Submit on Enter Key ---
     document.getElementById('session-password').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sessionSubmitBtn.click();
-        }
+        if (e.key === 'Enter') { e.preventDefault(); sessionSubmitBtn.click(); }
     });
 
     sessionSubmitBtn.addEventListener('click', async () => {
@@ -250,12 +295,14 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const uploadedMeta = [];
             for (let i = 0; i < sessionFiles.length; i++) {
-                progressText.innerText = `Uploading ${i + 1}/${sessionFiles.length}: ${sessionFiles[i].name}`;
-                const cloudRes = await uploadToCloudinary(sessionFiles[i], (pct) => progressText.innerText = `Uploading ${i+1}/${sessionFiles.length} (${pct}%)`);
-                uploadedMeta.push({ originalName: sessionFiles[i].name, url: cloudRes.secure_url, publicId: cloudRes.public_id, format: cloudRes.format, size: cloudRes.bytes });
+                progressText.innerText = `Encrypting ${i + 1}/${sessionFiles.length}: ${sessionFiles[i].name}`;
+                const chunkedFile = await shredAndUpload(sessionFiles[i], password, (pct) => {
+                    progressText.innerText = `Encrypting ${i+1}/${sessionFiles.length} (${pct}%)`;
+                });
+                uploadedMeta.push(chunkedFile);
             }
 
-            progressText.innerText = "Securing Data...";
+            progressText.innerText = "Securing Manifest...";
             const saveRes = await fetch(`${API_URL}/save-session`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password, type: 'session', files: uploadedMeta })
@@ -268,12 +315,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 switchView('success'); showToast('Upload Successful!', 'success');
             } else throw new Error(saveData.message);
         } catch (err) { showToast(typeof err === 'string' ? err : 'Upload Failed', 'error'); } 
-        finally { loader.classList.add('hidden'); }
+        finally { loader.classList.add('hidden'); progressText.innerText = "Processing Session..."; }
     });
 
-
     // ==========================================
-    // 7. RETRIEVE & RESULTS (DUAL MODE) LOGIC
+    // 7. RETRIEVE & RESULTS (THE REASSEMBLER)
     // ==========================================
     document.getElementById('form-retrieve').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -292,15 +338,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if(data.success) {
                 document.getElementById('retrieve-code').value = ''; document.getElementById('retrieve-password').value = '';
                 
+                // Direct Download for Single Files
                 if (data.files.length === 1 && data.files[0].format !== 'session') {
-                    triggerDownload(data.files[0].url, data.files[0].originalName);
-                    showToast("Packet Decrypted & Downloading!", "success");
+                    triggerDownload(data.files[0], currentSessionPassword);
                     switchView('single'); return;
                 }
 
                 retrievedFiles = data.files;
                 editSelectedIndices.clear();
-                isEditMode = false; // Always start in Retrieval Mode
+                isEditMode = false;
                 document.getElementById('session-code-display').innerText = currentSessionCode;
                 renderResultsList();
                 switchView('results');
@@ -316,7 +362,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isEmpty = retrievedFiles.length === 0;
 
-        // UI Toggles depending on mode
         document.getElementById('normal-toolbar').classList.toggle('hidden', isEditMode);
         document.getElementById('normal-footer').classList.toggle('hidden', isEditMode);
         document.getElementById('edit-footer').classList.toggle('hidden', !isEditMode);
@@ -324,7 +369,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const editToolbar = document.getElementById('edit-toolbar');
         const editDropZone = document.getElementById('edit-drop-zone');
 
-        // Mirroing Upload Session Logic for Dropzone & Toolbar
         if (isEditMode) {
             if (isEmpty) {
                 editToolbar.classList.add('hidden');
@@ -338,13 +382,11 @@ document.addEventListener('DOMContentLoaded', () => {
             editDropZone.classList.add('hidden');
         }
 
-        // Render File Streams
         retrievedFiles.forEach((f, index) => {
             const item = document.createElement('div');
             item.className = 'stream-item';
             
             if (isEditMode) {
-                // EDIT MODE RENDERING
                 const isSelected = editSelectedIndices.has(index);
                 if(isSelected) item.classList.add('selected');
                 
@@ -357,16 +399,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button type="button" class="btn-item-remove" onclick="removeRetrievedFile(${index})"><i class="fa-solid fa-xmark"></i></button>
                 `;
             } else {
-                // NORMAL RETRIEVAL RENDERING
                 item.innerHTML = `
                     <div class="file-name" title="${f.originalName}" style="margin-left: 0;">${f.originalName}</div>
-                    <button type="button" class="btn-item-download" data-url="${f.url}" data-name="${f.originalName}"><i class="fa-solid fa-download"></i></button>
+                    <button type="button" class="btn-item-download" data-index="${index}"><i class="fa-solid fa-download"></i></button>
                 `;
             }
             listEl.appendChild(item);
         });
 
-        // Attach Event Listeners
         if (isEditMode) {
             document.querySelectorAll('.edit-file-checkbox').forEach(cb => {
                 cb.addEventListener('change', (e) => {
@@ -375,7 +415,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderResultsList();
                 });
             });
-
             const count = editSelectedIndices.size;
             const batchDeleteBtn = document.getElementById('edit-batch-delete-btn');
             if(batchDeleteBtn) batchDeleteBtn.classList.toggle('hidden', count === 0);
@@ -385,19 +424,95 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             document.querySelectorAll('.btn-item-download').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    triggerDownload(e.currentTarget.dataset.url, e.currentTarget.dataset.name);
-                    showToast(`Downloading: ${e.currentTarget.dataset.name}`, 'success');
+                    const idx = parseInt(e.currentTarget.dataset.index);
+                    triggerDownload(retrievedFiles[idx], currentSessionPassword);
                 });
             });
         }
     }
 
-    // Force Download Helper
-    window.triggerDownload = (url, filename) => {
-        const downloadUrl = url.replace('/upload/', '/upload/fl_attachment/');
-        const link = document.createElement('a');
-        link.href = downloadUrl; link.download = filename;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    // THE REASSEMBLER (Zero-Memory Decryption & Download)
+    window.triggerDownload = async (fileMeta, password) => {
+        // LEGACY V2 SUPPORT (Ensures old un-chunked files still download perfectly)
+        if (fileMeta.url && !fileMeta.chunks) {
+            const downloadUrl = fileMeta.url.replace('/upload/', '/upload/fl_attachment/');
+            const link = document.createElement('a');
+            link.href = downloadUrl; link.download = fileMeta.originalName;
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            showToast(`Downloading: ${fileMeta.originalName}`, "success");
+            return;
+        }
+
+        try {
+            showToast(`Starting secure decryption for ${fileMeta.originalName}...`, "success");
+            const loader = document.getElementById('loader-edit') || document.getElementById('loader-retrieve');
+            const progressText = document.getElementById('progress-text-edit');
+            
+            if(loader) loader.classList.remove('hidden');
+
+            // 1. Rebuild AES-GCM Key
+            const encoder = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
+            const salt = new Uint8Array(fileMeta.salt);
+            const iv = new Uint8Array(fileMeta.iv);
+            const key = await crypto.subtle.deriveKey(
+                {name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256"}, 
+                keyMaterial, {name: "AES-GCM", length: 256}, false, ["decrypt"]
+            );
+
+            // 2. Prepare File System Stream (Bypasses Browser RAM Limits)
+            const isStreamsSupported = 'showSaveFilePicker' in window;
+            let writableStream;
+            let fallbackBlobs = [];
+
+            if (isStreamsSupported) {
+                try {
+                    const handle = await window.showSaveFilePicker({ suggestedName: fileMeta.originalName });
+                    writableStream = await handle.createWritable();
+                } catch(e) {
+                    if(loader) loader.classList.add('hidden');
+                    return; // User cancelled the save dialog
+                }
+            }
+
+            // 3. Stream, Decrypt, and Write Chunks
+            for (let i = 0; i < fileMeta.chunks.length; i++) {
+                if(progressText) progressText.innerText = `Decrypting Chunk ${i+1}/${fileMeta.chunks.length}...`;
+                
+                const res = await fetch(fileMeta.chunks[i]);
+                const encryptedBuffer = await res.arrayBuffer();
+                const decryptedBuffer = await crypto.subtle.decrypt({name: "AES-GCM", iv: iv}, key, encryptedBuffer);
+
+                if (isStreamsSupported) {
+                    await writableStream.write(decryptedBuffer); // Flush to hard drive immediately
+                } else {
+                    fallbackBlobs.push(decryptedBuffer); // Fallback for mobile devices
+                }
+            }
+
+            // 4. Finish
+            if (isStreamsSupported) {
+                await writableStream.close();
+            } else {
+                const finalBlob = new Blob(fallbackBlobs);
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(finalBlob);
+                link.download = fileMeta.originalName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+            }
+
+            showToast("File Decrypted & Saved!", "success");
+            if(loader) loader.classList.add('hidden');
+
+        } catch (e) {
+            console.error(e);
+            const loader = document.getElementById('loader-edit') || document.getElementById('loader-retrieve');
+            if(loader) loader.classList.add('hidden');
+            showToast("Decryption failed. Broken chunk or bad key.", "error");
+        }
     };
 
     window.removeRetrievedFile = (index) => { 
@@ -407,9 +522,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- NORMAL MODE ACTIONS ---
-    document.getElementById('download-all-btn').addEventListener('click', () => {
+    document.getElementById('download-all-btn').addEventListener('click', async () => {
         showToast("Initiating bulk download...", "success");
-        retrievedFiles.forEach((file, index) => setTimeout(() => triggerDownload(file.url, file.originalName), index * 800));
+        // Await sequentially to prevent memory/network crashing
+        for(let i=0; i<retrievedFiles.length; i++) {
+            await triggerDownload(retrievedFiles[i], currentSessionPassword);
+        }
     });
 
     document.getElementById('edit-session-btn').addEventListener('click', () => {
@@ -446,9 +564,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             for (let i = 0; i < newFiles.length; i++) {
-                progressText.innerText = `Uploading New File ${i+1}/${newFiles.length}...`;
-                const cloudRes = await uploadToCloudinary(newFiles[i]);
-                retrievedFiles.push({ originalName: newFiles[i].name, url: cloudRes.secure_url, publicId: cloudRes.public_id, format: cloudRes.format, size: cloudRes.bytes });
+                progressText.innerText = `Encrypting New File ${i+1}/${newFiles.length}...`;
+                const chunkedFile = await shredAndUpload(newFiles[i], currentSessionPassword, (pct) => progressText.innerText = `Uploading New File ${i+1}/${newFiles.length} (${pct}%)`);
+                retrievedFiles.push(chunkedFile);
             }
             renderResultsList(); showToast("Files added! Click 'SAVE CHANGES'.", "success");
         } catch(err) { showToast("Failed to upload new files", "error"); } 
@@ -473,19 +591,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast("Session Updated Successfully!", "success");
                 isEditMode = false; 
                 editSelectedIndices.clear(); 
-                renderResultsList(); // Auto-returns to normal mode!
+                renderResultsList(); 
             } else throw new Error(data.message);
         } catch(err) { showToast(typeof err === 'string' ? err : "Failed to update session", "error"); } 
         finally { loader.classList.add('hidden'); }
     });
 
-    // --- Normal Footer Action (Close) ---
     document.getElementById('back-to-home').addEventListener('click', () => {
         switchView('retrieve');
         retrievedFiles = []; currentSessionCode = ''; currentSessionPassword = ''; editSelectedIndices.clear(); isEditMode = false;
     });
 
-    // --- Edit Footer Action (Cancel) ---
     document.getElementById('cancel-edit-btn').addEventListener('click', () => {
         switchView('retrieve');
         retrievedFiles = []; currentSessionCode = ''; currentSessionPassword = ''; editSelectedIndices.clear(); isEditMode = false;
@@ -499,7 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Code Copied!');
     });
     
-    document.getElementById('reset-upload-btn').addEventListener('click', () => UI.switchView('single'));
+    document.getElementById('reset-upload-btn').addEventListener('click', () => switchView('single'));
 
     document.querySelectorAll('.magnetic-btn').forEach(btn => {
         btn.addEventListener('mousemove', (e) => {

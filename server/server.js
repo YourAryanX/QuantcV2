@@ -19,17 +19,20 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB Connected"))
     .catch(err => console.error("❌ DB Connection Error:", err));
 
-// --- DATABASE SCHEMA ---
+// --- DATABASE SCHEMA (Updated for Chunking) ---
 const sessionSchema = new mongoose.Schema({
     code: { type: String, unique: true },
     passwordHash: { type: String, required: true },
     type: { type: String, enum: ['single', 'session'], default: 'single' },
     files: [{
         originalName: String,
-        url: String,       
-        publicId: String,
+        url: String,       // Kept for legacy compatibility
+        publicId: String,  // Kept for legacy compatibility
+        chunks: [String],  // Array of Cloudinary URLs for the encrypted 5MB slices
         format: String,
-        size: Number
+        size: Number,
+        salt: [Number],    // Needed for Client-Side Decryption
+        iv: [Number]       // Needed for Client-Side Decryption
     }],
     createdAt: { type: Date, default: Date.now, expires: 172800 } // Auto-deletes after 48 Hours
 });
@@ -64,7 +67,7 @@ app.get("/api/sign-upload", (req, res) => {
     const timestamp = Math.round((new Date()).getTime() / 1000);
     const signature = cloudinary.utils.api_sign_request({
         timestamp: timestamp,
-        folder: "quantc_v2_neural",
+        folder: "quantc_v2_neural", // Fallback for single uploads
     }, process.env.CLOUDINARY_API_SECRET);
 
     res.json({ 
@@ -135,6 +138,11 @@ app.post("/api/update-session", async (req, res) => {
         console.error("Update Error:", error);
         res.status(500).json({ success: false, message: "Server Error" });
     }
+});
+
+// --- WAKE UP ROUTE (Fixes Cold Start) ---
+app.get("/api/ping", (req, res) => {
+    res.status(200).json({ status: "Server is awake!" });
 });
 
 // Start Server
