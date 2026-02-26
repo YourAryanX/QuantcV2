@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 1. CONFIGURATION & VARIABLES
     // ==========================================
-    const API_URL = '/api'; // Local server API
+    const API_URL = 'https://quantcv2.onrender.com/api'; // Live Render API
     const MAX_FILES = 10;
     
     // Upload State
@@ -512,4 +512,5 @@ document.addEventListener('DOMContentLoaded', () => {
         requestAnimationFrame(updateBackground);
     }
     updateBackground();
+
 });
