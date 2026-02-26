@@ -628,4 +628,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- WAKE UP SERVER ON PAGE LOAD (Fixes Cold Start) ---
     fetch(`${API_URL}/ping`).catch(() => console.log("Waking up server..."));
+    
 });
