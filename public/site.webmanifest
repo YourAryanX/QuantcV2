@@ -1,0 +1,31 @@
+{
+  "name": "QuantC - Secure Anonymous File Sharing",
+  "short_name": "QuantC",
+  "description": "Zero-knowledge, fully anonymous, and AES-GCM encrypted file-sharing platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "orientation": "portrait-primary",
+  "categories": ["utilities", "productivity", "security"],
+  "icons": [
+    {
+      "src": "/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
