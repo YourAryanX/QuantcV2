@@ -1,5 +1,5 @@
 {
-  "name": "QuantC - Secure Anonymous File Sharing",
+  "name": "QuantC",
   "short_name": "QuantC",
   "description": "Zero-knowledge, fully anonymous, and AES-GCM encrypted file-sharing platform.",
   "start_url": "/",
