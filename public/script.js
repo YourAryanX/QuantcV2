@@ -51,18 +51,60 @@ document.addEventListener('DOMContentLoaded', () => {
     // 3. NAVIGATION & UI UTILS
     // ==========================================
     function switchView(viewName) {
+        // --- 1. THE DOUBLE-CLICK FIX ---
+        if (navs[viewName] && navs[viewName].classList.contains('active')) {
+            const target = views[viewName];
+            
+            gsap.to(target, { opacity: 0, y: 10, duration: 0.2, onComplete: () => {
+                // Clear the correct form
+                if (viewName === 'single') {
+                    document.getElementById('form-single').reset();
+                    document.getElementById('single-file-name').innerText = 'Upload Packet';
+                    document.getElementById('single-file-name').style.color = 'var(--text-muted)';
+                } else if (viewName === 'session') {
+                    sessionFiles.length = 0;
+                    selectedIndices.clear();
+                    renderSessionList();
+                    document.getElementById('session-password').value = '';
+                } else if (viewName === 'retrieve') {
+                    document.getElementById('form-retrieve').reset();
+                }
+                
+                // Fade back in smoothly
+                gsap.to(target, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" });
+            }});
+            return;
+        }
+
+        // --- 2. THE SMOOTH TRANSITION FIX (NO BLINKING) ---
         Object.values(navs).forEach(btn => btn.classList.remove('active'));
         if(navs[viewName]) navs[viewName].classList.add('active');
 
-        Object.values(views).forEach(el => {
-            if (!el.classList.contains('hidden')) {
-                gsap.to(el, { opacity: 0, y: 20, duration: 0.3, onComplete: () => el.classList.add('hidden') });
-            }
-        });
-        
-        const target = views[viewName];
-        target.classList.remove('hidden');
-        gsap.fromTo(target, { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.5, delay: 0.3, ease: "power2.out" });
+        const currentView = Object.values(views).find(el => !el.classList.contains('hidden'));
+        const targetView = views[viewName];
+
+        if (currentView) {
+            // Wait for the old card to completely fade out...
+            gsap.to(currentView, { 
+                opacity: 0, 
+                y: 15, 
+                duration: 0.25, 
+                onComplete: () => {
+                    currentView.classList.add('hidden');
+                    
+                    // ...THEN show the new card.
+                    targetView.classList.remove('hidden');
+                    gsap.fromTo(targetView, 
+                        { opacity: 0, y: -15 }, 
+                        { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }
+                    );
+                } 
+            });
+        } else {
+            // Initial load
+            targetView.classList.remove('hidden');
+            gsap.fromTo(targetView, { opacity: 0, y: -15 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" });
+        }
     }
 
     navs.single.addEventListener('click', () => switchView('single'));
@@ -286,8 +328,12 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedIndices.clear(); renderSessionList();
     });
 
+    // --- NEW FEATURE: Allow "Enter" key to trigger the Session Upload ---
     document.getElementById('session-password').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); sessionSubmitBtn.click(); }
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevents page refresh
+            sessionSubmitBtn.click(); // Triggers the button logic below
+        }
     });
 
     sessionSubmitBtn.addEventListener('click', async () => {
@@ -324,6 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { showToast(typeof err === 'string' ? err : 'Upload Failed', 'error'); } 
         finally { loader.classList.add('hidden'); progressText.innerText = "Processing Session..."; }
     });
+
 
     // ==========================================
     // 7. RETRIEVE & RESULTS (THE REASSEMBLER)
@@ -421,6 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderResultsList();
                 });
             });
+
             const count = editSelectedIndices.size;
             const batchDeleteBtn = document.getElementById('edit-batch-delete-btn');
             if(batchDeleteBtn) batchDeleteBtn.classList.toggle('hidden', count === 0);
@@ -437,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // THE REASSEMBLER (Silent Blob Download Fix)
+    // THE REASSEMBLER (Silent Blob Download)
     window.triggerDownload = async (fileMeta, password) => {
         // LEGACY V2 SUPPORT
         if (fileMeta.url && !fileMeta.chunks) {
@@ -604,6 +652,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Code Copied!');
     });
     
+    // --- BUG FIX: Removed 'UI.' to match the global function name ---
     document.getElementById('reset-upload-btn').addEventListener('click', () => switchView('single'));
 
     document.querySelectorAll('.magnetic-btn').forEach(btn => {
