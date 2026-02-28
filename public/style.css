@@ -10,7 +10,6 @@
     --glass-border: rgba(255, 255, 255, 0.12);
     --text-primary: #ffffff;
     --text-muted: #94a3b8;
-    /* Added: Enables smooth height animations */
     interpolate-size: allow-keywords; 
 }
 
@@ -33,13 +32,43 @@ body { background: var(--bg-main); color: var(--text-primary); overflow: hidden;
 .b2 { width: 550px; height: 550px; background: radial-gradient(circle, #6366f1, transparent); bottom: -5%; right: 10%; }
 .b3 { width: 450px; height: 450px; background: radial-gradient(circle, #a855f7, transparent); top: 30%; left: 35%; opacity: 0.4; }
 
+/* ==========================================
+   INITIAL LOAD ANIMATIONS
+   ========================================== */
+.heading-section {
+    animation: initFadeDown 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+#view-single:not(.hidden) {
+    animation: initFadeUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
+}
+
+@keyframes initFadeDown {
+    0% { opacity: 0; transform: translateY(-30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes initFadeUp {
+    0% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
 /* --- NAVIGATION --- */
 .floating-nav {
     position: fixed; left: 30px; top: 50%; transform: translateY(-50%);
     background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(30px);
     border: 1px solid var(--glass-border); border-radius: 30px;
     padding: 20px 12px; display: flex; flex-direction: column; gap: 25px; z-index: 100;
+    
+    transform-origin: center center;
+    animation: navScaleY 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
 }
+
+@keyframes navScaleY {
+    0% { opacity: 0; transform: translateY(-50%) scaleY(0); }
+    100% { opacity: 1; transform: translateY(-50%) scaleY(1); }
+}
+
 .nav-brand {
     width: 48px; height: 48px; background: linear-gradient(135deg, #6366f1, #a855f7); color: white;
     border-radius: 16px; display: flex; align-items: center; justify-content: center; font-weight: 800; cursor: pointer;
@@ -63,7 +92,10 @@ body { background: var(--bg-main); color: var(--text-primary); overflow: hidden;
     width: 100%; max-width: 420px; margin-top: 40px; box-shadow: 0 40px 100px rgba(0,0,0,0.5);
     position: relative; overflow: hidden;
 }
-.session-hud { padding: 30px !important; display: flex; flex-direction: column; height: 550px; max-height: 85vh; }
+.session-hud { 
+    padding: 30px !important; display: flex; flex-direction: column; height: 550px; max-height: 85vh; 
+    transition: height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), max-height 0.4s ease;
+}
 
 /* --- UPLOAD UI --- */
 .drop-trigger {
@@ -113,7 +145,6 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 .tool-btn.danger { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3); }
 .tool-btn.danger:hover { background: #ff6b6b; color: white; }
 
-/* Fixed: Added padding: 8px 0; to give space between borders and files */
 .data-stream { 
     flex-grow: 1; border-radius: 12px; margin-bottom: 20px; overflow-y: auto; overflow-x: hidden; 
     border: 1px dashed rgba(255, 255, 255, 0.1); transition: 0.3s; scrollbar-width: thin; 
@@ -134,7 +165,6 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 .drop-zone-content .icon-box { font-size: 3rem; color: var(--accent); margin-bottom: 15px; opacity: 0.8; transition: 0.3s; }
 .drop-zone-content:hover .icon-box { transform: scale(1.1); opacity: 1; }
 
-/* Fixed: Added flex-shrink: 0, separated transitions, and added spring animation */
 .stream-item { 
     display: flex; align-items: center; justify-content: space-between; 
     padding: 12px; margin: 0 5px; 
@@ -191,7 +221,6 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 @keyframes spin { 100% { transform: rotate(360deg); } }
 
 /* --- TOASTS --- */
-/* Fixed: Kept exactly as it is for desktop (top right) */
 #toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 15px; }
 .toast { background: rgba(15, 23, 42, 0.95); border: 1px solid var(--glass-border); border-left: 4px solid var(--accent); color: white; padding: 15px 25px; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); transform: translateX(120%); transition: 0.5s; }
 .toast.show { transform: translateX(0); }
@@ -218,26 +247,37 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 @keyframes spin-backward { 100% { transform: rotate(-360deg); } }
 @keyframes stream-data { 100% { stroke-dashoffset: -20; } }
 
-/* Added: The keyframes for the spring animation */
 @keyframes smoothItemAdd {
     0% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; transform: translateY(-10px); }
     100% { opacity: 1; max-height: 80px; padding-top: 12px; padding-bottom: 12px; transform: translateY(0); }
 }
 
 /* ========================================= */
-/* --- RESPONSIVE --- */
+/* --- RESPONSIVE MATH --- */
 /* ========================================= */
 @media (max-width: 768px) {
-    .floating-nav { left: 50%; top: auto; bottom: 20px; transform: translateX(-50%) !important; flex-direction: row; width: auto; max-width: 90%; padding: 12px 25px; border-radius: 50px; }
+    .floating-nav { 
+        left: 50%; top: auto; bottom: 20px; transform: translateX(-50%) !important; 
+        flex-direction: row; width: auto; max-width: 90%; padding: 12px 25px; border-radius: 50px; 
+        animation: navScaleYMobile 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+    }
+    
+    @keyframes navScaleYMobile {
+        0% { opacity: 0; transform: translateX(-50%) scaleY(0); }
+        100% { opacity: 1; transform: translateX(-50%) scaleY(1); }
+    }
+
     .nav-brand { display: none; }
     
-    .viewport { padding: 60px 15px 100px 15px; justify-content: flex-start; }
-    .main-heading { font-size: 3rem; }
-    .glass-hub { padding: 30px; margin-top: 25px; max-width: 100%; width: 100%; border-radius: 30px; }
+    /* THE FIX: Restored dynamic center alignment! */
+    .viewport { padding: 20px 15px 100px 15px; justify-content: center; min-height: 100vh; }
+    .main-heading { font-size: 3rem; margin-top: -30px; }
     
-    /* Fixed: Set to exact 5-file height immediately, but protects nav on small phones */
+    /* Safely calculates 16px of gap on the sides */
+    .glass-hub { padding: 30px; margin-top: 25px; max-width: 100%; width: calc(100% - 32px); border-radius: 30px; }
+    
+    /* Fixed 5-file cap */
     .session-hud { height: min(520px, calc(100vh - 240px)); display: flex; flex-direction: column; }
     
-    /* Fixed: Removed the bad toast logic so it stays at the top-right corner */
     .b1, .b2, .b3 { transform: scale(0.6); }
 }
