@@ -51,12 +51,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // 3. NAVIGATION & UI UTILS
     // ==========================================
     function switchView(viewName) {
-        // --- 1. THE DOUBLE-CLICK FIX ---
         if (navs[viewName] && navs[viewName].classList.contains('active')) {
             const target = views[viewName];
             
             gsap.to(target, { opacity: 0, y: 10, duration: 0.2, onComplete: () => {
-                // Clear the correct form
                 if (viewName === 'single') {
                     document.getElementById('form-single').reset();
                     document.getElementById('single-file-name').innerText = 'Upload Packet';
@@ -70,13 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('form-retrieve').reset();
                 }
                 
-                // Fade back in smoothly
                 gsap.to(target, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" });
             }});
             return;
         }
 
-        // --- 2. THE SMOOTH TRANSITION FIX (NO BLINKING) ---
         Object.values(navs).forEach(btn => btn.classList.remove('active'));
         if(navs[viewName]) navs[viewName].classList.add('active');
 
@@ -84,15 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetView = views[viewName];
 
         if (currentView) {
-            // Wait for the old card to completely fade out...
             gsap.to(currentView, { 
                 opacity: 0, 
                 y: 15, 
                 duration: 0.25, 
                 onComplete: () => {
                     currentView.classList.add('hidden');
-                    
-                    // ...THEN show the new card.
                     targetView.classList.remove('hidden');
                     gsap.fromTo(targetView, 
                         { opacity: 0, y: -15 }, 
@@ -101,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 } 
             });
         } else {
-            // Initial load
             targetView.classList.remove('hidden');
             gsap.fromTo(targetView, { opacity: 0, y: -15 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" });
         }
@@ -128,12 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     async function shredAndUpload(file, password, onProgress) {
         try {
-            // --- DYNAMIC CHUNK OPTIMIZER ---
-            let dynamicChunkSize = 5 * 1024 * 1024; // Default 5MB for small files
-            if (file.size > 50 * 1024 * 1024) dynamicChunkSize = 25 * 1024 * 1024; // 25MB for files > 50MB
-            if (file.size > 500 * 1024 * 1024) dynamicChunkSize = 50 * 1024 * 1024; // 50MB for massive files
+            let dynamicChunkSize = 5 * 1024 * 1024; 
+            if (file.size > 50 * 1024 * 1024) dynamicChunkSize = 25 * 1024 * 1024; 
+            if (file.size > 500 * 1024 * 1024) dynamicChunkSize = 50 * 1024 * 1024; 
 
-            // 1. Zero-Knowledge Setup: Generate AES-GCM Key
             const encoder = new TextEncoder();
             const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
             const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -146,19 +136,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalChunks = Math.ceil(file.size / dynamicChunkSize) || 1;
             const chunkUrls = [];
 
-            // 2. Get Secure Cloudinary Signature
             const signRes = await fetch(`${API_URL}/sign-upload`);
             if(!signRes.ok) throw new Error("Could not get secure signature.");
             const signData = await signRes.json();
 
-            // 3. Slice, Encrypt, and Upload chunks one by one
             for (let i = 0; i < totalChunks; i++) {
                 const start = i * dynamicChunkSize;
                 const end = Math.min(start + dynamicChunkSize, file.size);
                 const slice = file.slice(start, end);
                 const buffer = await slice.arrayBuffer();
 
-                // Encrypt chunk
                 const encryptedBuffer = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, key, buffer);
                 const encryptedBlob = new Blob([encryptedBuffer], {type: "application/octet-stream"});
 
@@ -170,7 +157,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append("folder", "quantc_v2_chunks");
                 formData.append("resource_type", "raw"); 
 
-                // Upload chunk with progress tracking
                 await new Promise((resolve, reject) => {
                     const xhr = new XMLHttpRequest();
                     xhr.open("POST", `https://api.cloudinary.com/v1_1/${signData.cloudName}/raw/upload`, true);
@@ -195,7 +181,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Return the complete manifest to save to MongoDB
             return { 
                 originalName: file.name, 
                 chunks: chunkUrls, 
@@ -328,11 +313,10 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedIndices.clear(); renderSessionList();
     });
 
-    // --- NEW FEATURE: Allow "Enter" key to trigger the Session Upload ---
     document.getElementById('session-password').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            e.preventDefault(); // Prevents page refresh
-            sessionSubmitBtn.click(); // Triggers the button logic below
+            e.preventDefault(); 
+            sessionSubmitBtn.click(); 
         }
     });
 
@@ -370,7 +354,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { showToast(typeof err === 'string' ? err : 'Upload Failed', 'error'); } 
         finally { loader.classList.add('hidden'); progressText.innerText = "Processing Session..."; }
     });
-
 
     // ==========================================
     // 7. RETRIEVE & RESULTS (THE REASSEMBLER)
@@ -485,9 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // THE REASSEMBLER (Silent Blob Download)
     window.triggerDownload = async (fileMeta, password) => {
-        // LEGACY V2 SUPPORT
         if (fileMeta.url && !fileMeta.chunks) {
             const downloadUrl = fileMeta.url.replace('/upload/', '/upload/fl_attachment/');
             const link = document.createElement('a');
@@ -504,7 +485,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if(loader) loader.classList.remove('hidden');
 
-            // 1. Rebuild AES-GCM Key
             const encoder = new TextEncoder();
             const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
             const salt = new Uint8Array(fileMeta.salt);
@@ -514,10 +494,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 keyMaterial, {name: "AES-GCM", length: 256}, false, ["decrypt"]
             );
 
-            // 2. Array to hold the decrypted chunks in memory
             let decryptedChunks = [];
 
-            // 3. Fetch and Decrypt Chunks
             for (let i = 0; i < fileMeta.chunks.length; i++) {
                 progressText.innerText = `Decrypting Chunk ${i+1}/${fileMeta.chunks.length}...`;
                 
@@ -530,7 +508,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             progressText.innerText = "Assembling File...";
 
-            // 4. Create silent download link using Blob Object URL
             const finalBlob = new Blob(decryptedChunks);
             const link = document.createElement('a');
             link.href = URL.createObjectURL(finalBlob);
@@ -539,7 +516,6 @@ document.addEventListener('DOMContentLoaded', () => {
             link.click();
             document.body.removeChild(link);
             
-            // Clean up memory after a few seconds
             setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 
             showToast("File Decrypted & Downloaded!", "success");
@@ -559,7 +535,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderResultsList(); 
     };
 
-    // --- NORMAL MODE ACTIONS ---
     document.getElementById('download-all-btn').addEventListener('click', async () => {
         showToast("Initiating bulk download...", "success");
         for(let i=0; i<retrievedFiles.length; i++) {
@@ -573,7 +548,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderResultsList();
     });
 
-    // --- EDIT MODE ACTIONS ---
     document.getElementById('edit-select-all').addEventListener('change', (e) => {
         if (e.target.checked) retrievedFiles.forEach((_, i) => editSelectedIndices.add(i)); 
         else editSelectedIndices.clear();
@@ -586,7 +560,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderResultsList();
     });
 
-    // --- Add More Files (Edit Mode) ---
     const editFileInput = document.getElementById('edit-file-input');
     document.getElementById('edit-add-more-btn').addEventListener('click', () => editFileInput.click());
     document.getElementById('edit-drop-zone').addEventListener('click', () => editFileInput.click());
@@ -610,7 +583,6 @@ document.addEventListener('DOMContentLoaded', () => {
         finally { loader.classList.add('hidden'); editFileInput.value = ''; }
     });
 
-    // --- Save Edits ---
     document.getElementById('save-edits-btn').addEventListener('click', async () => {
         if(retrievedFiles.length === 0) return showToast("Cannot save empty session. Delete it instead.", "error");
         
@@ -645,35 +617,41 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ==========================================
-    // 8. MISC UTILS & ANIMATIONS
+    // 8. MISC UTILS & ANIMATIONS (OPTIMIZED)
     // ==========================================
     document.getElementById('copy-btn').addEventListener('click', () => {
         navigator.clipboard.writeText(document.getElementById('generated-code').innerText);
         showToast('Code Copied!');
     });
     
-    // --- BUG FIX: Removed 'UI.' to match the global function name ---
     document.getElementById('reset-upload-btn').addEventListener('click', () => switchView('single'));
 
-    document.querySelectorAll('.magnetic-btn').forEach(btn => {
-        btn.addEventListener('mousemove', (e) => {
-            const rect = btn.getBoundingClientRect();
-            gsap.to(btn, { duration: 0.3, x: (e.clientX - rect.left - rect.width/2)*0.3, y: (e.clientY - rect.top - rect.height/2)*0.3 });
+    // --- SENIOR SWE OPTIMIZATION: Hardware Detection ---
+    // Detect if the device is a touchscreen (Mobile/Tablet) to disable expensive phantom mouse loops
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia("(pointer: coarse)").matches);
+
+    // ONLY run expensive mouse-tracking animations if on a laptop/desktop!
+    if (!isTouchDevice) {
+        document.querySelectorAll('.magnetic-btn').forEach(btn => {
+            btn.addEventListener('mousemove', (e) => {
+                const rect = btn.getBoundingClientRect();
+                gsap.to(btn, { duration: 0.3, x: (e.clientX - rect.left - rect.width/2)*0.3, y: (e.clientY - rect.top - rect.height/2)*0.3 });
+            });
+            btn.addEventListener('mouseleave', () => gsap.to(btn, { duration: 0.5, x: 0, y: 0, ease: "elastic.out(1, 0.3)" }));
         });
-        btn.addEventListener('mouseleave', () => gsap.to(btn, { duration: 0.5, x: 0, y: 0, ease: "elastic.out(1, 0.3)" }));
-    });
-    
-    let mouse = { x: 0, y: 0 };
-    document.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
-    
-    function updateBackground() {
-        const mx = (window.innerWidth/2 - mouse.x)*0.05, my = (window.innerHeight/2 - mouse.y)*0.05;
-        gsap.to('#orb-1', { x: mx, y: my, duration: 2 });
-        gsap.to('#orb-2', { x: -mx, y: -my, duration: 2 });
-        gsap.to('#orb-3', { x: mx/2, y: my/2, duration: 2 });
-        requestAnimationFrame(updateBackground);
+        
+        let mouse = { x: 0, y: 0 };
+        document.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        
+        function updateBackground() {
+            const mx = (window.innerWidth/2 - mouse.x)*0.05, my = (window.innerHeight/2 - mouse.y)*0.05;
+            gsap.to('#orb-1', { x: mx, y: my, duration: 2 });
+            gsap.to('#orb-2', { x: -mx, y: -my, duration: 2 });
+            gsap.to('#orb-3', { x: mx/2, y: my/2, duration: 2 });
+            requestAnimationFrame(updateBackground);
+        }
+        updateBackground();
     }
-    updateBackground();
 
     // --- WAKE UP SERVER ON PAGE LOAD (Fixes Cold Start) ---
     fetch(`${API_URL}/ping`).catch(() => console.log("Waking up server..."));

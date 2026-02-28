@@ -111,12 +111,11 @@ body { background: var(--bg-main); color: var(--text-primary); overflow: hidden;
 }
 .drop-trigger:hover .pulse-icon { transform: scale(1.1);  box-shadow: 0 0 30px var(--accent-glow); }
 
-/* FIX 2: File Name Truncation */
 #single-file-name { 
     white-space: nowrap; 
     overflow: hidden; 
     text-overflow: ellipsis; 
-    max-width: 85%; /* Ensures it stays inside the trigger box padding */
+    max-width: 85%; 
     margin: 0 auto; 
     display: block; 
     text-align: center; 
@@ -188,7 +187,6 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 .stream-item:hover { background: rgba(255, 255, 255, 0.06); }
 .stream-item.selected { background: rgba(129, 140, 248, 0.15); border-color: rgba(129, 140, 248, 0.3); }
 
-/* Ensuring items in session list also truncate */
 .file-name { 
     flex-grow: 1; 
     font-size: 0.9rem; 
@@ -237,7 +235,6 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 #copy-btn:hover { color: white; }
 .caution-box { background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.3); color: #facc15; padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; margin-bottom: 20px; }
 
-/* FIX 1: Loader Corner Leak */
 .loading-overlay { 
     position: absolute; 
     inset: 0; 
@@ -248,7 +245,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
     flex-direction: column; 
     align-items: center; 
     justify-content: center; 
-    border-radius: inherit; /* THIS FIXES THE CORNER LEAK */
+    border-radius: inherit; 
     gap: 20px; 
 }
 .spinner { width: 50px; height: 50px; border: 3px solid rgba(129, 140, 248, 0.2); border-radius: 50%; border-top-color: var(--accent); animation: spin 1s infinite linear; box-shadow: 0 0 20px var(--accent-glow); }
@@ -287,7 +284,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 }
 
 /* ========================================= */
-/* --- RESPONSIVE MATH --- */
+/* --- RESPONSIVE MATH & PERFORMANCE FIX --- */
 /* ========================================= */
 @media (max-width: 768px) {
     .floating-nav { 
@@ -303,12 +300,37 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px v
 
     .nav-brand { display: none; }
     
+    /* Intact dynamic centering layout */
     .viewport { padding: 20px 15px 100px 15px; justify-content: center; min-height: 100vh; }
     .main-heading { font-size: 3rem; margin-top: -30px; }
     
+    /* 16px lateral padding constraint */
     .glass-hub { padding: 30px; margin-top: 25px; max-width: 100%; width: calc(100% - 32px); border-radius: 30px; }
     
+    /* 5-file cap strict boundary */
     .session-hud { height: min(520px, calc(100vh - 240px)); display: flex; flex-direction: column; }
     
     .b1, .b2, .b3 { transform: scale(0.6); }
+
+    /* --- GPU PERFORMANCE OVERRIDES FOR 4GB RAM PHONES --- */
+    .glass-hub {
+        backdrop-filter: blur(20px) saturate(150%);
+        -webkit-backdrop-filter: blur(20px) saturate(150%);
+    }
+
+    .background-canvas::after {
+        mix-blend-mode: normal; 
+        opacity: 0.04; 
+    }
+
+    .bubble {
+        filter: blur(25px);
+        mix-blend-mode: normal;
+        transform: translateZ(0); 
+    }
+
+    .data-stream {
+        transform: translateZ(0); 
+        will-change: transform;
+    }
 }
